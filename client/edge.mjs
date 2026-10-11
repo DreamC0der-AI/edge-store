@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { Store } from './lib.mjs';
+import { Store, printable, safe } from './lib.mjs';
 
 const CONFIG = process.env.EDGE_STORE_CONFIG || join(homedir(), '.config', 'edge-store', 'config.json');
 
@@ -12,7 +12,7 @@ const USAGE = `edge-store: stable file storage on Telegram, indexed by a Cloudfl
 
   edge init <worker-url> <key>            save connection settings (owner token or an app key)
   edge whoami                             what this key may do
-  edge web [--link] [--read-only] [--prefix <path/>]   open the web page, signed in with a new key
+  edge web [--link] [--read-only] [--prefix <path/>]   open the web page with a new key to sign in with
   edge key add <name> [--read-only|--admin] [--prefix <path/>]   grant a key to an app (shown once)
   edge key ls                             list keys and when they were last used
   edge key revoke <key-id>                stop a key working
@@ -89,7 +89,7 @@ async function main([cmd, ...args]) {
         // the owner's copy remembers the channels, so the index can be restored even if it is lost
         const chats = me.role === 'admin' ? (await store.api('GET', '/config')).channels.map(c => c.chat_id) : undefined;
         await saveConfig({ url, token, chats });
-        return console.log(`saved ${CONFIG}; signed in as "${me.name}" with ${me.role} access${me.prefix ? ` to ${me.prefix}` : ''}`);
+        return console.log(safe`saved ${CONFIG}; signed in as "${me.name}" with ${me.role} access${me.prefix ? ` to ${me.prefix}` : ''}`);
     }
 
     const config = await loadConfig();
@@ -98,7 +98,7 @@ async function main([cmd, ...args]) {
     switch (cmd) {
         case 'whoami': {
             const me = await store.whoami();
-            return console.log(`"${me.name}": ${me.role} access${me.prefix ? `, limited to ${me.prefix}` : ''}`);
+            return console.log(safe`"${me.name}": ${me.role} access${me.prefix ? `, limited to ${me.prefix}` : ''}`);
         }
         case 'web': {
             const url = config.url.replace(/\/+$/, '');
@@ -107,10 +107,10 @@ async function main([cmd, ...args]) {
             // the page gets a key of its own, so it can be revoked without touching anything else
             const k = await store.keyAdd(`web page, ${new Date().toISOString().slice(0, 10)}`, { role, prefix });
             const link = `${url}/#key=${k.key}`;
-            const after = `The browser remembers the key until you sign out there; afterwards just open ${url}\nRevoke it with: edge key revoke ${k.id}`;
+            const after = safe`The browser remembers the key until you sign out there; afterwards just open ${url}` + '\n' + safe`Revoke it with: edge key revoke ${k.id}`;
             if (args.includes('--link')) {
-                console.log(link);
-                return console.log(`Open this link once in the browser you want to sign in (it carries new key ${k.id}).\n${after}`);
+                console.log(printable(link));
+                return console.log(safe`Open this link once in the browser you want to sign in and press "Sign in" there (it carries new key ${k.id}).` + '\n' + after);
             }
             try {
                 await openInBrowser(link);
@@ -118,7 +118,7 @@ async function main([cmd, ...args]) {
                 await store.keyRevoke(k.id);
                 throw new Error(`could not start a browser here; run "edge web --link" and open the link yourself`);
             }
-            return console.log(`opened ${url} signed in with new key ${k.id} ("${k.name}").\n${after}`);
+            return console.log(safe`opened ${url} with new key ${k.id} ("${k.name}"); press "Sign in" there.` + '\n' + after);
         }
         case 'key': {
             const [sub, ...rest] = args;
@@ -128,21 +128,21 @@ async function main([cmd, ...args]) {
                 const role = rest.includes('--admin') ? 'admin' : rest.includes('--read-only') ? 'read' : 'write';
                 const prefix = rest.includes('--prefix') ? rest[rest.indexOf('--prefix') + 1] : '';
                 const k = await store.keyAdd(name, { role, prefix });
-                console.log(`key "${k.name}" (${k.id}): ${k.role} access${k.prefix ? `, limited to ${k.prefix}` : ''}`);
-                console.log(k.key);
-                return console.log('This is the only time the key is shown. Revoke it with: edge key revoke ' + k.id);
+                console.log(safe`key "${k.name}" (${k.id}): ${k.role} access${k.prefix ? `, limited to ${k.prefix}` : ''}`);
+                console.log(printable(k.key));
+                return console.log(safe`This is the only time the key is shown. Revoke it with: edge key revoke ${k.id}`);
             }
             if (sub === 'ls') {
                 const keys = await store.keyList();
                 for (const k of keys) {
-                    console.log(`${k.id}  ${k.role.padEnd(5)}  ${(k.prefix || '(everything)').padEnd(20)}  ${k.revoked_at ? 'REVOKED ' + when(k.revoked_at) : 'last used ' + when(k.last_used_at)}  ${k.name}`);
+                    console.log(safe`${k.id}  ${k.role.padEnd(5)}  ${(k.prefix || '(everything)').padEnd(20)}  ${k.revoked_at ? 'REVOKED ' + when(k.revoked_at) : 'last used ' + when(k.last_used_at)}  ${k.name}`);
                 }
-                return console.log(`${keys.filter(k => !k.revoked_at).length} active key(s), ${keys.filter(k => k.revoked_at).length} revoked`);
+                return console.log(safe`${keys.filter(k => !k.revoked_at).length} active key(s), ${keys.filter(k => k.revoked_at).length} revoked`);
             }
             if (sub === 'revoke') {
                 if (!rest[0]) throw new Error('usage: edge key revoke <key-id>');
                 await store.keyRevoke(rest[0]);
-                return console.log(`key ${rest[0]} revoked`);
+                return console.log(safe`key ${rest[0]} revoked`);
             }
             throw new Error('usage: edge key add <name> [...] | edge key ls | edge key revoke <key-id>');
         }
@@ -151,11 +151,11 @@ async function main([cmd, ...args]) {
             if (sub === 'add') {
                 const c = await store.api('POST', '/channels', { chat_id: chatId, slot: Number(slot) });
                 await saveConfig({ ...config, chats: [...new Set([...(config.chats || []), c.chat_id])] });
-                return console.log(`channel "${c.title}" registered for slot ${c.slot}`);
+                return console.log(safe`channel "${c.title}" registered for slot ${c.slot}`);
             }
             if (sub === 'rm') {
                 await store.api('DELETE', `/channels/${encodeURIComponent(chatId)}`);
-                return console.log(`channel ${chatId} retired; existing replicas there are still used`);
+                return console.log(safe`channel ${chatId} retired; existing replicas there are still used`);
             }
             throw new Error('usage: edge channel add <chat-id> <slot> | edge channel rm <chat-id>');
         }
@@ -163,74 +163,74 @@ async function main([cmd, ...args]) {
             const [local, remote = local && basename(local)] = args;
             if (!local) throw new Error('usage: edge put <local-file> [remote-path]');
             const r = await store.put(local, remote, { onProgress: progress('uploaded') });
-            return console.log(`${remote}: ${size(r.size)} in ${r.chunks} chunk(s), two replicas each${r.resumed ? ' (resumed)' : ''}`);
+            return console.log(safe`${remote}: ${size(r.size)} in ${r.chunks} chunk(s), two replicas each${r.resumed ? ' (resumed)' : ''}`);
         }
         case 'get': {
             const [remote, local = remote && basename(remote)] = args;
             if (!remote) throw new Error('usage: edge get <remote-path> [local-file]');
             const f = await store.get(remote, local, { onProgress: progress('downloaded') });
-            return console.log(`${local}: ${size(f.size)}, hash verified`);
+            return console.log(safe`${local}: ${size(f.size)}, hash verified`);
         }
         case 'ls': {
             const files = await store.ls(args[0] || '');
-            for (const f of files) console.log(`${size(f.size).padStart(10)}  ${when(f.created_at)}  ${f.path}`);
-            return console.log(`${files.length} file(s), ${size(files.reduce((n, f) => n + f.size, 0))}`);
+            for (const f of files) console.log(safe`${size(f.size).padStart(10)}  ${when(f.created_at)}  ${f.path}`);
+            return console.log(safe`${files.length} file(s), ${size(files.reduce((n, f) => n + f.size, 0))}`);
         }
         case 'rm': {
             if (!args[0]) throw new Error('usage: edge rm <remote-path>');
             const r = await store.rm(args[0]);
-            return console.log(`${args[0]}: removed (${r.messages} messages)`);
+            return console.log(safe`${args[0]}: removed (${r.messages} messages)`);
         }
         case 'status': {
             const s = await store.status();
             const scrub = s.kv.scrub || {};
-            console.log(`files:     ${s.files.complete?.n || 0} complete (${size(s.files.complete?.bytes || 0)}), ${s.files.uploading?.n || 0} uploading`);
-            console.log(`replicas:  ${s.replicas.ok || 0} ok, ${s.replicas.missing || 0} missing`);
-            console.log(`chunks with no readable copy on record: ${s.chunksWithNoCopy}`);
+            console.log(safe`files:     ${s.files.complete?.n || 0} complete (${size(s.files.complete?.bytes || 0)}), ${s.files.uploading?.n || 0} uploading`);
+            console.log(safe`replicas:  ${s.replicas.ok || 0} ok, ${s.replicas.missing || 0} missing`);
+            console.log(safe`chunks with no readable copy on record: ${s.chunksWithNoCopy}`);
             const every = s.kv.scrub_interval_min ?? 360;
-            console.log(`scrubber:  ${s.kv.paused ? 'PAUSED' : 'running'}, last run ${when(scrub.lastTickAt)}, ${scrub.passes || 0} full pass(es), last finished ${when(scrub.passDoneAt)}`);
-            console.log(`           a pass starts at most every ${every} minute(s); current pass started ${when(scrub.passStartedAt)}`);
-            if (scrub.unclear) console.log(`           note: ${scrub.unclear.count} check(s) got an unrecognised answer at ${when(scrub.unclear.at)}: ${scrub.unclear.why}`);
-            console.log(`backup:    last ${when(s.kv.backup?.at)}${s.kv.backup?.problems?.length ? ' (' + s.kv.backup.problems.join('; ') + ')' : ''}`);
-            for (const c of s.channels) console.log(`channel:   slot ${c.slot} "${c.title}" ${c.active ? 'open' : 'retired'}, ${c.messages} messages`);
-            for (const e of s.events.slice(0, 10)) console.log(`event:     ${when(e.at)} ${e.kind} ${e.detail}`);
+            console.log(safe`scrubber:  ${s.kv.paused ? 'PAUSED' : 'running'}, last run ${when(scrub.lastTickAt)}, ${scrub.passes || 0} full pass(es), last finished ${when(scrub.passDoneAt)}`);
+            console.log(safe`           a pass starts at most every ${every} minute(s); current pass started ${when(scrub.passStartedAt)}`);
+            if (scrub.unclear) console.log(safe`           note: ${scrub.unclear.count} check(s) got an unrecognised answer at ${when(scrub.unclear.at)}: ${scrub.unclear.why}`);
+            console.log(safe`backup:    last ${when(s.kv.backup?.at)}${s.kv.backup?.problems?.length ? ' (' + s.kv.backup.problems.join('; ') + ')' : ''}`);
+            for (const c of s.channels) console.log(safe`channel:   slot ${c.slot} "${c.title}" ${c.active ? 'open' : 'retired'}, ${c.messages} messages`);
+            for (const e of s.events.slice(0, 10)) console.log(safe`event:     ${when(e.at)} ${e.kind} ${e.detail}`);
             return;
         }
         case 'verify': {
-            const r = await store.verify(args[0] || '', { onProgress: ({ path, idx, slot, ok }) => { if (!ok) console.log(`BAD  ${path} chunk ${idx} slot ${slot}`); } });
-            console.log(`${r.files} file(s), ${r.replicas} replica(s) read, ${r.bad.length} bad`);
+            const r = await store.verify(args[0] || '', { onProgress: ({ path, idx, slot, ok }) => { if (!ok) console.log(safe`BAD  ${path} chunk ${idx} slot ${slot}`); } });
+            console.log(safe`${r.files} file(s), ${r.replicas} replica(s) read, ${r.bad.length} bad`);
             if (r.bad.length) process.exitCode = 1;
             return;
         }
         case 'repair': {
-            const r = await store.repair({ onProgress: (p) => console.log(`${p.ok ? 'repaired' : 'FAILED  '} ${p.path} chunk ${p.idx}${p.ok ? '' : ': ' + p.why}`) });
-            console.log(`${r.repaired} repaired, ${r.failed.length} failed`);
+            const r = await store.repair({ onProgress: (p) => console.log(safe`${p.ok ? 'repaired' : 'FAILED  '} ${p.path} chunk ${p.idx}${p.ok ? '' : ': ' + p.why}`) });
+            console.log(safe`${r.repaired} repaired, ${r.failed.length} failed`);
             if (r.failed.length) process.exitCode = 1;
             return;
         }
         case 'clean': {
             const paths = await store.clean();
-            return console.log(`${paths.length} abandoned upload(s) and leftover preview(s) removed${paths.length ? ': ' + paths.join(', ') : ''}`);
+            return console.log(safe`${paths.length} abandoned upload(s) and leftover preview(s) removed${paths.length ? ': ' + paths.join(', ') : ''}`);
         }
         case 'backup': {
             const b = await store.backup();
-            return console.log(`index backed up: ${b.rows} rows, ${size(b.bytes)}, ${b.messages.length} channel(s)${b.problems.length ? '; ' + b.problems.join('; ') : ''}`);
+            return console.log(safe`index backed up: ${b.rows} rows, ${size(b.bytes)}, ${b.messages.length} channel(s)${b.problems.length ? '; ' + b.problems.join('; ') : ''}`);
         }
         case 'restore': {
             if (!config.chats?.length) throw new Error('this config has no channel list; restore must be run with the owner token');
             const r = await store.restore(config.chats);
-            return console.log(`index restored from the backup of ${when(r.takenAt)}: ${Object.entries(r.counts).map(([t, n]) => `${n} ${t}`).join(', ')}`);
+            return console.log(safe`index restored from the backup of ${when(r.takenAt)}: ${Object.entries(r.counts).map(([t, n]) => `${n} ${t}`).join(', ')}`);
         }
         case 'pause':
         case 'resume':
             await store.api('PUT', '/settings', { paused: cmd === 'pause' });
-            return console.log(`scrubber ${cmd === 'pause' ? 'paused' : 'running'}`);
+            return console.log(safe`scrubber ${cmd === 'pause' ? 'paused' : 'running'}`);
         default:
             throw new Error(`unknown command "${cmd}"\n\n${USAGE}`);
     }
 }
 
 main(process.argv.slice(2)).catch((e) => {
-    console.error(`edge: ${e.message}`);
+    console.error(`edge: ${String(e.message).split('\n').map(printable).join('\n')}`);
     process.exit(1);
 });

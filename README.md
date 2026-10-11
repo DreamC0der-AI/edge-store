@@ -90,7 +90,7 @@ edge key revoke <key-id>                           the key stops working at once
 The Worker serves a page at its own address (`https://<your-worker>.workers.dev/`) for saving and checking files from a browser:
 
 ```
-edge web                    grant a key for the page and open it, already signed in
+edge web                    grant a key for the page and open it, ready to sign in
 edge web --link             print the sign-in link instead, to open on another device such as a phone
 edge web --read-only        a page that can look and download but not change anything
 edge web --prefix phone/    a page confined to one folder
@@ -100,7 +100,7 @@ edge web --prefix phone/    a page confined to one folder
 - **Checking:** the page lists what is stored, by folder, with a name filter. "Download" fetches a file and checks every part against its hash before handing it over; "Delete" asks twice.
 - **Looking:** clicking a picture, video, sound file, PDF or text file opens it in the page, with arrows to step through the folder. The file is downloaded and checked first, so this is for files up to 256 MB; a text file shows its first 256 KB. What a file is shown as depends only on its name, and a stored web page or script is only ever shown as text.
 - **Previews:** a picture saved through the page gets a small preview (a JPEG of at most 256 pixels, a few kilobytes) stored beside it as `<folder>/.thumbs/<the picture's file id>.jpg`, made in the browser from the picture before it is sent. The list fetches only these, once per browser. A picture stored some other way has no preview until it is first opened in the page, which makes one; the list never downloads a whole picture just to show a preview. The page hides the `.thumbs` folders, `edge ls` and your own apps see them as ordinary files. Deleting a picture in the page or with `edge rm` deletes its preview; `edge clean` removes previews whose picture was deleted some other way.
-- **Signing in:** the page itself holds no secrets and anyone can load it; it does nothing without a key. The key is kept in that browser until you sign out, and each `edge web` makes a new key that shows up in `edge key ls` and can be revoked on its own. Signed in with the owner token or an admin key, the page also shows whether every stored copy is in place.
+- **Signing in:** the page itself holds no secrets and anyone can load it; it does nothing without a key. A link from `edge web` carries a key, and the page asks before using it: it shows which key it is and what it replaces, and signs in only when you press "Sign in". A link cannot sign a browser in, or swap the key it is signed in with, by itself. The key is kept in that browser until you sign out, and each `edge web` makes a new key that shows up in `edge key ls` and can be revoked on its own. Signed in with the owner token or an admin key, the page also shows whether every stored copy is in place.
 - **Kept in the browser:** the key, and the previews it has fetched. Signing out removes both.
 - **Large downloads:** Chrome and Edge on a computer write a download over 256 MB straight to a file you pick. Other browsers (Safari, Firefox, phones) hold the whole download in memory until it is complete, so use the command line there for files of several gigabytes.
 
@@ -111,7 +111,7 @@ The page lives in `worker/web/` and is an ordinary client of the HTTP API below.
 ```
 edge init <worker-url> <key>            save connection settings (owner token or an app key)
 edge whoami                             what this key may do
-edge web [--link]                       open the web page, signed in with a new key
+edge web [--link]                       open the web page with a new key to sign in with
 edge put <local-file> [remote-path]     upload (resumes an interrupted upload)
 edge get <remote-path> [local-file]     download and verify
 edge ls [prefix]                        list files

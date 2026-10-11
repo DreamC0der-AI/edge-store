@@ -3,6 +3,7 @@
 // and callers identify themselves with keys that can be granted, limited and revoked.
 
 const MAX_CHUNK = 19 * 1024 * 1024;        // a bot cannot download files of 20 MB or more
+const MAX_JSON = 4 * 1024 * 1024;          // the largest JSON request body that is read
 const SCRUB_BATCH = 20;                    // replicas checked per run, two Telegram calls each
 const CHECK_BUDGET_MS = 20_000;            // stop starting new checks after this long; the rest wait for the next run
 const DEFAULT_SCRUB_INTERVAL_MIN = 360;    // a pass over all replicas starts at most this often
@@ -23,6 +24,30 @@ const json = (body, status = 200) =>
 const hex = (buf) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 const caption = (fileId, idx) => `${fileId}:${idx}`;
 const isSha = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/.test(s);
+// Reads a request body into memory, or returns null as soon as it turns out longer than `max`.
+// The length a client declares is not relied on: a body sent without one is counted as it arrives,
+// so nothing longer than `max` is ever held here.
+async function readUpTo(req, max) {
+    if (Number(req.headers.get('content-length')) > max) return null;
+    if (!req.body) return new Uint8Array(0);
+    const reader = req.body.getReader();
+    const parts = [];
+    let n = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        n += value.byteLength;
+        if (n > max) {
+            await reader.cancel().catch(() => {});
+            return null;
+        }
+        parts.push(value);
+    }
+    const out = new Uint8Array(n);
+    let at = 0;
+    for (const part of parts) { out.set(part, at); at += part.byteLength; }
+    return out;
+}
 const normPath = (p) => {
     const s = String(p ?? '').replace(/^\/+/, '');
     if (!s || s.length > 1024) throw new HttpError(400, 'invalid path');
@@ -170,7 +195,11 @@ async function route(req, env, ctx, who) {
     const m = req.method;
     const q = url.searchParams;
     const is = (method, ...parts) => m === method && p.length === parts.length && parts.every((x, i) => x === '*' || x === p[i]);
-    const body = () => req.json().catch(() => ({}));
+    const body = async () => {
+        const bytes = await readUpTo(req, MAX_JSON);
+        if (!bytes) throw new HttpError(413, 'the request body is too large');
+        try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { return {}; }
+    };
     const need = (role) => {
         if (RANK[who.role] < RANK[role]) throw new HttpError(403, `this key is not allowed to do that (it needs ${role} access)`);
     };
@@ -575,11 +604,8 @@ async function rawGet(env, ctx, path) {
 // A whole file in one request body. Only for files that fit in one chunk: it is buffered and hashed here.
 async function rawPut(req, env, path) {
     const db = env.DB;
-    if (Number(req.headers.get('content-length')) > MAX_CHUNK) {
-        throw new HttpError(413, `larger than ${MAX_CHUNK} bytes: upload it in chunks, starting with POST /files`);
-    }
-    const buf = await req.arrayBuffer();
-    if (buf.byteLength > MAX_CHUNK) throw new HttpError(413, `larger than ${MAX_CHUNK} bytes: upload it in chunks, starting with POST /files`);
+    const buf = await readUpTo(req, MAX_CHUNK);
+    if (!buf) throw new HttpError(413, `larger than ${MAX_CHUNK} bytes: upload it in chunks, starting with POST /files`);
     const existing = (await db.prepare('SELECT id, state FROM files WHERE path = ?1').bind(path).all()).results;
     if (existing.some(f => f.state === 'complete')) throw new HttpError(409, 'a file already exists at this path');
     for (const f of existing) await removeFile(env, db, f.id);

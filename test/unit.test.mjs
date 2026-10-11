@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, createHash } from 'node:crypto';
-import { Store, withRetry, pool, sha256, thumbPath } from '../client/lib.mjs';
+import { Store, withRetry, pool, sha256, thumbPath, printable, safe } from '../client/lib.mjs';
 import * as web from '../worker/web/util.js';
 
 const err = (props) => Object.assign(new Error('x'), props);
@@ -219,4 +219,15 @@ test('a preview is stored beside its picture under the picture\'s id, and listin
     assert.equal(web.rawUrl('a b/100%/é#?.jpg'), '/raw/a%20b/100%25/%C3%A9%23%3F.jpg');
     assert.deepEqual([[600, 400], [400, 800], [100, 50], [5000, 3], [256, 256]].map(([w, h]) => web.fitWithin(w, h, 256)),
         [{ w: 256, h: 171 }, { w: 128, h: 256 }, { w: 100, h: 50 }, { w: 256, h: 1 }, { w: 256, h: 256 }]);
+});
+
+test('text from the store is printed with control characters spelled out, and ordinary text untouched', () => {
+    assert.equal(printable('photos/2026/déjà vu 文件.jpg'), 'photos/2026/déjà vu 文件.jpg');
+    assert.equal(printable('a\x1b[2Jb\nc\rd\x07\x9b'), 'a\\u{1b}[2Jb\\u{a}c\\u{d}d\\u{7}\\u{9b}');
+    assert.equal(printable('evil\u202egnp.exe'), 'evil\\u{202e}gnp.exe');
+    assert.equal(printable(undefined), 'undefined');
+    // in a template, only the values are changed; the template's own line breaks stay
+    const name = 'x\ny';
+    assert.equal(safe`one ${name}\ntwo ${3}`, 'one x\\u{a}y\ntwo 3');
+    assert.equal(safe`no values`, 'no values');
 });

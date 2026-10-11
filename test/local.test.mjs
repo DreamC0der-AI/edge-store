@@ -2,7 +2,8 @@
 // against a simulated Telegram that can be broken on purpose.
 import { test, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, openSync, writeSync, closeSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, openSync, writeSync, closeSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -220,6 +221,19 @@ test('one-request upload and download of a small file over plain HTTP', async ()
     assert.equal(empty.status, 200);
     assert.equal((await (await call(k, 'GET', '/raw/http/empty.bin')).arrayBuffer()).byteLength, 0);
     assert.equal((await call(k, 'PUT', '/raw/http/huge.bin', { body: Buffer.alloc(20 * 1024 * 1024) })).status, 413);
+
+    // the same when the body arrives without a declared length: it is counted as it comes in, not trusted
+    const stream = (total) => new ReadableStream({
+        pull(c) { if (total <= 0) return c.close(); const n = Math.min(total, 1024 * 1024); total -= n; c.enqueue(new Uint8Array(n)); },
+    });
+    const before = tgm.messages(A).size + tgm.messages(B).size;
+    assert.equal((await call(k, 'PUT', '/raw/http/huge-unannounced.bin', { body: stream(20 * 1024 * 1024), duplex: 'half' })).status, 413);
+    assert.equal((await call(k, 'POST', '/files', { body: stream(5 * 1024 * 1024), duplex: 'half', headers: { 'content-type': 'application/json' } })).status, 413);
+    assert.equal(tgm.messages(A).size + tgm.messages(B).size, before);
+    assert.ok(!(await store.ls('http/', { all: true })).some(f => f.path.includes('huge')));
+    const unannounced = await call(k, 'PUT', '/raw/http/unannounced.bin', { body: stream(3 * 1024 * 1024), duplex: 'half' });
+    assert.equal(unannounced.status, 200);
+    assert.equal((await store.manifest('http/unannounced.bin')).size, 3 * 1024 * 1024);
 });
 
 test('a multi-chunk file downloads in one request, up to the per-request limit', { timeout: 60_000 }, async () => {
@@ -733,4 +747,34 @@ test('when a whole channel is lost, its replicas are rebuilt in a replacement ch
     await ticksUntil(async () => await missing() === 0, 'rebuild in the replacement channel');
     assert.deepEqual((await replicas('channel-loss.bin')).filter(r => r.slot === 1).map(r => r.chat_id), ['-1005', '-1005']);
     assert.equal((await store.verify('channel-loss.bin')).bad.length, 0);
+});
+
+test('the command line cannot be made to send terminal control codes by a file name, a key name or a report', async () => {
+    const ESC = '\x1b';
+    const evilPath = `cli/a${ESC}[2J${ESC}[1;31mb\n       0 B  2026-01-01 00:00:00Z  cli/forged.txt`;
+    const app = (await store.keyAdd(`app${ESC}]0;owned\x07`, { prefix: 'cli/' })).key;
+    const r = await call(app, 'PUT', `/raw/${evilPath.split('/').map(encodeURIComponent).join('/')}`, { body: 'x' });
+    assert.equal(r.status, 200);
+    const m = await store.manifest(evilPath);
+    await call(app, 'POST', `/replicas/${m.chunkList[0].replicas[0].id}`, { method: 'POST', body: JSON.stringify({ why: `${ESC}[5mblink\rgone` }), headers: { 'content-type': 'application/json' } });
+
+    const config = join(tmp, 'cli-config.json');
+    writeFileSync(config, JSON.stringify({ url: worker.url, token: worker.token }));
+    // not the blocking kind of call: the simulated Telegram lives in this process and has to keep answering
+    const edge = (...args) => new Promise((res) => {
+        execFile(process.execPath, ['client/edge.mjs', ...args], { encoding: 'utf8', env: { ...process.env, EDGE_STORE_CONFIG: config } },
+            (err, stdout, stderr) => res(stdout + stderr));
+    });
+    const control = /[\x00-\x09\x0b-\x1f\x7f-\x9f]/; // anything but the line breaks the command itself prints
+    const ls = await edge('ls', 'cli/');
+    assert.ok(!control.test(ls), JSON.stringify(ls));
+    assert.equal(ls.trim().split('\n').length, 2, ls); // the one file and the total: the forged entry is not a line of its own
+    assert.match(ls, /cli\/a\\u\{1b\}\[2J/);
+    for (const args of [['key', 'ls'], ['status'], ['get', `cli/nothing${ESC}[2J`], ['rm', `cli/nothing${ESC}[2J`], ['verify', 'cli/']]) {
+        const out = await edge(...args);
+        assert.ok(!control.test(out), `${args.join(' ')}: ${JSON.stringify(out)}`);
+    }
+    assert.match(await edge('key', 'ls'), /app\\u\{1b\}\]0;owned\\u\{7\}/);
+    assert.match(await edge('status'), /\\u\{1b\}\[5mblink\\u\{d\}gone/);
+    await store.rm(evilPath);
 });

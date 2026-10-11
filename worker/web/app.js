@@ -877,12 +877,17 @@ async function loadHealth() {
 
 // ---- wiring -----------------------------------------------------------------
 
+// "key "phone", can read and write, limited to phone/"
+function describe(who) {
+    const may = who.name === 'root' && who.role === 'admin' ? 'owner token, full control'
+        : `key "${who.name}", ${{ read: 'can only read', write: 'can read and write', admin: 'full control' }[who.role]}`;
+    return `${may}${who.prefix ? `, limited to ${who.prefix}` : ''}`;
+}
+
 function showApp() {
     $('signin').hidden = true;
     $('app').hidden = false;
-    const may = me.name === 'root' && me.role === 'admin' ? 'owner token, full control'
-        : `key "${me.name}", ${{ read: 'can only read', write: 'can read and write', admin: 'full control' }[me.role]}`;
-    $('who').textContent = `${may}${me.prefix ? `, limited to ${me.prefix}` : ''}`;
+    $('who').textContent = describe(me);
     $('drop').hidden = !canWrite();
     dir = hashToDir(location.hash) ?? homeOf(me.prefix);
     renderFiles();
@@ -923,7 +928,8 @@ $('clear-transfers').addEventListener('click', () => {
 $('filter').addEventListener('input', renderFiles);
 $('refresh').addEventListener('click', loadFiles);
 window.addEventListener('hashchange', () => {
-    if (takeKeyFromAddress()) return;
+    const handed = takeKeyFromAddress();
+    if (handed) return offerKey(handed);
     const next = hashToDir(location.hash);
     if (!me || next === null) return;
     dir = next;
@@ -965,19 +971,57 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 // "edge web" opens the page as .../#key=<key>; the key is taken out of the address at once.
+// A link is not allowed to sign the browser in by itself: anyone can send a link carrying a key of
+// their own, and whoever followed it would then be saving files where the sender can read them.
+// So the page says whose key it is and waits to be told, and until then nothing changes.
+let offered = null;     // the key from a link, waiting for an answer
+
 function takeKeyFromAddress() {
     const handed = location.hash.match(/^#key=(.+)$/);
-    if (!handed) return false;
+    if (!handed) return null;
     history.replaceState(null, '', location.pathname);
-    if (me) signOut();
-    signIn(decodeURIComponent(handed[1]));
-    return true;
+    try { return decodeURIComponent(handed[1]); } catch { return handed[1]; }
 }
 
-if (takeKeyFromAddress()) {
-    // signing in
-} else if (storage.get()) {
-    signIn(storage.get());
-} else {
-    signOut();
+async function offerKey(candidate) {
+    if (candidate === key) return; // already signed in with it
+    offered = candidate;
+    const say = (title, who, canSignIn) => {
+        if (offered !== candidate) return; // a newer link took its place
+        $('handover-title').textContent = title;
+        $('handover-who').textContent = who;
+        $('handover-now').textContent = me && canSignIn ? `This browser is signed in with ${describe(me)}. That key will be forgotten here.` : '';
+        $('handover-now').hidden = !(me && canSignIn);
+        $('handover-ok').hidden = !canSignIn;
+        $('handover-cancel').textContent = canSignIn ? 'Cancel' : 'Close';
+        if (!$('handover').open) $('handover').showModal();
+    };
+    let r;
+    try {
+        r = await fetch('/whoami', { headers: { authorization: `Bearer ${candidate}` } });
+    } catch {
+        return say('The key in this link could not be checked', 'The store cannot be reached. Check the connection and open the link again.', false);
+    }
+    if (!r.ok) {
+        return say('The key in this link does not work', r.status === 401 ? 'It may be mistyped or revoked.' : `The store answered with an error (HTTP ${r.status}). Open the link again later.`, false);
+    }
+    const who = await r.json().catch(() => null);
+    if (!who?.name) return say('The key in this link could not be checked', 'The store gave an answer that could not be read.', false);
+    say('Sign in with the key from this link?', `It is ${describe(who)}.`, true);
 }
+
+$('handover-ok').addEventListener('click', () => {
+    const candidate = offered;
+    $('handover').close();
+    if (!candidate) return;
+    if (me) signOut();
+    signIn(candidate);
+});
+$('handover-cancel').addEventListener('click', () => $('handover').close());
+$('handover').addEventListener('close', () => { offered = null; });
+
+// The key this browser already holds stays in use whatever the address says.
+const handed = takeKeyFromAddress();
+if (storage.get()) await signIn(storage.get());
+else signOut();
+if (handed) offerKey(handed);

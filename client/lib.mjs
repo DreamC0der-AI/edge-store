@@ -10,6 +10,14 @@ export const CHUNK = 16 * 1024 * 1024;
 export const BACKUP_TAG = 'edge-store-backup';
 const SLOTS = [0, 1];
 
+// Text that came from the store (file paths, key names, channel titles, error messages) with its control
+// characters spelled out, so that printing it cannot recolour the terminal, move the cursor, rewrite earlier
+// lines or pass one entry off as several. Right-to-left overrides, which reorder what is displayed, go the same way.
+const UNPRINTABLE = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
+export const printable = (text) => String(text).replace(UNPRINTABLE, (c) => `\\u{${c.codePointAt(0).toString(16)}}`);
+// The same for a template: what is written out in the template is kept, every value put into it is made printable.
+export const safe = (strings, ...values) => strings.reduce((out, s, i) => out + printable(values[i - 1]) + s);
+
 // The web page stores a small preview of each picture beside it, as <folder>/.thumbs/<the picture's
 // file id>.jpg (worker/web/util.js makes them by the same rule). A preview goes when its picture goes.
 export const thumbPath = (path, id) => `${path.slice(0, path.lastIndexOf('/') + 1)}.thumbs/${id}.jpg`;

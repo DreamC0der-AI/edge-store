@@ -226,6 +226,23 @@ button.tile { cursor: pointer; }
 .viewer-pdf a { padding: 8px 12px; color: var(--accent); font-size: 13px; }
 .f-meta { color: var(--muted); font-size: 13px; }
 
+/* ---- a key handed over in a link ---- */
+
+.handover {
+    width: min(460px, calc(100vw - 24px));
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+}
+.handover[open] { display: grid; gap: 12px; }
+.handover::backdrop { background: rgb(0 0 0 / 0.6); }
+.handover h2 { font-size: 18px; }
+.handover p { overflow-wrap: anywhere; }
+.handover .hint { color: var(--muted); font-size: 13px; }
+.handover-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
 .empty { text-align: center; color: var(--muted); padding: 28px 0 8px; }
 .summary { color: var(--muted); font-size: 13px; margin-top: 8px; }
 footer { color: var(--muted); font-size: 13px; }

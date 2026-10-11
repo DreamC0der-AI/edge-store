@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { Store, pool } from '../client/lib.mjs';
+import { Store, pool, printable } from '../client/lib.mjs';
 
 const store = new Store(JSON.parse(readFileSync(process.env.EDGE_STORE_CONFIG || join(homedir(), '.config', 'edge-store', 'config.json'), 'utf8')));
 const doDelete = process.argv.includes('--delete');
@@ -42,7 +42,7 @@ for (const ch of status.channels) {
         else foreign++;
     });
     orphans.sort((a, b) => a - b);
-    console.log(`"${ch.title}": probed ids 1-${top}, ${known.size} known to the index, ${orphans.length} orphan(s)${orphans.length ? ' ' + JSON.stringify(orphans) : ''}, ${foreign} other message(s) left alone`);
+    console.log(`"${printable(ch.title)}": probed ids 1-${top}, ${known.size} known to the index, ${orphans.length} orphan(s)${orphans.length ? ' ' + JSON.stringify(orphans) : ''}, ${foreign} other message(s) left alone`);
     if (doDelete && orphans.length) {
         for (let i = 0; i < orphans.length; i += 100) await store.telegram('deleteMessages', { chat_id: ch.chat_id, message_ids: orphans.slice(i, i + 100) });
         console.log(`  deleted ${orphans.length}`);

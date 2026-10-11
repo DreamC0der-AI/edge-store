@@ -167,6 +167,7 @@ await step('the web page, in a real browser, saves a file through the deployed W
         page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
         // the key is confined to its folder, so that is where the page starts
         await page.goto(`${config.url}/#key=${appKey.key}`);
+        await page.click('#handover-ok'); // a key from a link is used only once this is pressed
         await page.locator('#file-list li').first().waitFor({ timeout: 60_000 });
         check(await page.textContent('#drop-target') === prefix + 'app/', 'the page did not start in the key\'s folder');
         check(!page.url().includes('es_'), 'the key stayed in the address bar');

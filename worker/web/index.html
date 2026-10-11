@@ -20,7 +20,7 @@
         <input id="key-input" type="password" autocomplete="off" spellcheck="false" required placeholder="es_…">
         <p id="signin-error" class="error" role="alert" hidden></p>
         <button type="submit" class="primary">Open</button>
-        <p class="hint">Get a key with <code>edge key add "web"</code>, or run <code>edge web</code> to open this page already signed in. The key is kept in this browser until you sign out.</p>
+        <p class="hint">Get a key with <code>edge key add "web"</code>, or run <code>edge web</code> to open this page with a key at hand. The key is kept in this browser until you sign out.</p>
     </form>
 </main>
 
@@ -74,6 +74,17 @@
         <button id="viewer-close" type="button">Close</button>
     </header>
     <div id="viewer-body" class="viewer-body"></div>
+</dialog>
+
+<dialog id="handover" class="handover" aria-labelledby="handover-title">
+    <h2 id="handover-title">Sign in with the key from this link?</h2>
+    <p id="handover-who"></p>
+    <p id="handover-now" hidden></p>
+    <p class="hint">Continue only if you made this link yourself or trust whoever sent it. Files you save while signed in with a key can be read by everyone who holds that key.</p>
+    <div class="handover-buttons">
+        <button id="handover-cancel" type="button">Cancel</button>
+        <button id="handover-ok" type="button" class="primary">Sign in</button>
+    </div>
 </dialog>
 
 <div id="drop-veil" class="drop-veil" hidden><p>Drop to save</p></div>

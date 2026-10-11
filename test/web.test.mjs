@@ -140,12 +140,18 @@ async function open(key, { path = '' } = {}) {
         if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push(m.text());
     });
     await page.goto(`${worker.url}/${key ? `#key=${key}` : ''}`);
-    if (key) await page.locator('#app').waitFor();
+    if (key) await accept(page);
     if (path) {
         await page.evaluate((hash) => { location.hash = hash; }, path);
         await page.locator('#drop-target', { hasText: path.slice(2) }).waitFor({ state: 'attached' }); // hidden for a key that cannot write
     }
     return { page, problems };
+}
+
+// A key that arrives in a link is only used once "Sign in" is pressed.
+async function accept(page) {
+    await page.click('#handover-ok');
+    await page.locator('#app').waitFor();
 }
 
 // which of the Worker's addresses the page asked for from here on
@@ -220,10 +226,73 @@ inBrowser('a wrong key is refused; a good one opens the files, is remembered, an
     await page.reload();
     await page.locator('#signin').waitFor();
 
-    // the link "edge web" opens, here arriving in a tab that already shows the page
+    // the link "edge web" opens, here arriving in a tab that already shows the page:
+    // it says whose key it is and does nothing until it is told to
     await page.goto(`${worker.url}/#key=${key}`);
-    await page.locator('#app').waitFor();
+    await page.locator('#handover-who', { hasText: 'It is key "browser", can read and write.' }).waitFor();
     assert.ok(!page.url().includes(key), 'the key stayed in the address');
+    assert.ok(await page.locator('#app').isHidden());
+    assert.ok(await page.locator('#handover-now').isHidden());
+    assert.equal(await page.evaluate(() => localStorage.length), 0);
+    await accept(page);
+    assert.equal(await page.evaluate(() => localStorage.getItem('edge-store-key')), key);
+    assert.deepEqual(problems, []);
+});
+
+inBrowser('a link cannot swap the key a browser is signed in with, or sign it in, without being confirmed', async () => {
+    await store.put(makeFile('mine.txt', 100), 'mine.txt');
+    await store.put(makeFile('theirs.txt', 100), 'drop-box/theirs.txt');
+    const mine = await grant('my own key');
+    const theirs = await grant('someone else', { prefix: 'drop-box/' });
+    const { page, problems } = await open(mine);
+    await row(page, 'mine.txt').waitFor();
+    const kept = () => page.evaluate(() => localStorage.getItem('edge-store-key'));
+
+    // a link carrying somebody else's key, followed while signed in
+    await page.goto(`${worker.url}/#key=${theirs}`);
+    await page.locator('#handover-who', { hasText: 'It is key "someone else", can read and write, limited to drop-box/.' }).waitFor();
+    assert.match(await page.textContent('#handover-now'), /signed in with key "my own key".*will be forgotten here/);
+    assert.ok(!page.url().includes(theirs));
+    assert.equal(await kept(), mine);
+    assert.match(await page.textContent('#who'), /key "my own key"/);
+
+    // turned down: nothing has changed, and a file saved now still goes where this key's files go
+    await page.click('#handover-cancel');
+    assert.equal(await kept(), mine);
+    await page.setInputFiles('#file-input', [makeFile('after.txt', 50)]);
+    await transfersDone(page, 1);
+    assert.ok((await store.ls()).some(f => f.path === 'after.txt'));
+    await page.reload();
+    await row(page, 'mine.txt').waitFor();
+    assert.ok(await page.locator('#handover').isHidden());
+
+    // the same link in a fresh tab of the same browser: Escape turns it down as well
+    await page.goto(`${worker.url}/#key=${theirs}`);
+    await page.locator('#handover-who', { hasText: 'someone else' }).waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await kept(), mine);
+
+    // a link carrying the key already in use asks nothing
+    await page.goto(`${worker.url}/#key=${mine}`);
+    await row(page, 'mine.txt').waitFor();
+    assert.ok(await page.locator('#handover').isHidden());
+    assert.ok(!page.url().includes(mine));
+
+    // accepted: only now is the key replaced
+    await page.goto(`${worker.url}/#key=${theirs}`);
+    await page.locator('#handover-who', { hasText: 'someone else' }).waitFor();
+    await page.click('#handover-ok');
+    await row(page, 'drop-box/theirs.txt').waitFor();
+    assert.equal(await kept(), theirs);
+    assert.match(await page.textContent('#who'), /key "someone else"/);
+
+    // a link whose key does not work says so and changes nothing
+    await page.goto(`${worker.url}/#key=es_00000000_${'0'.repeat(64)}`);
+    await page.locator('#handover-title', { hasText: 'does not work' }).waitFor();
+    assert.ok(await page.locator('#handover-ok').isHidden());
+    await page.click('#handover-cancel');
+    assert.equal(await kept(), theirs);
+    await row(page, 'drop-box/theirs.txt').waitFor();
     assert.deepEqual(problems, []);
 });
 
@@ -243,7 +312,7 @@ inBrowser('"edge web --link" grants a key for the page and prints a link that si
     contexts.push(context);
     const page = await context.newPage();
     await page.goto(link);
-    await page.locator('#app').waitFor();
+    await accept(page);
     assert.equal(page.url(), `${worker.url}/`);
     assert.equal(await page.textContent('#drop-target'), 'web/');
     assert.match(edge('web', '--link', '--read-only'), /#key=es_/);
@@ -389,6 +458,9 @@ inBrowser('on a phone-sized screen nothing is cut off or scrolls sideways', asyn
     await page.locator('#signin').waitFor();
     assert.ok(await fits(), 'the sign-in form is wider than the screen');
     await page.goto(`${worker.url}/#key=${key}`);
+    await page.locator('#handover-who').waitFor();
+    assert.ok(await fits(), 'the question about the key in a link is wider than the screen');
+    await accept(page);
     await page.locator('#file-list li').nth(1).waitFor();
     await page.setInputFiles('#file-input', [makeFile(`${'another-long-unbroken-name-'.repeat(6)}.bin`, 100)]);
     await transfersDone(page, 1);
