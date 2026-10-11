@@ -26,23 +26,23 @@ const caption = (fileId, idx) => `${fileId}:${idx}`;
 const isSha = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/.test(s);
 // Reads a request body into memory, or returns null as soon as it turns out longer than `max`.
 // The length a client declares is not relied on: a body sent without one is counted as it arrives,
-// so nothing longer than `max` is ever held here.
+// so no more than `max` is ever held here.
 async function readUpTo(req, max) {
     if (Number(req.headers.get('content-length')) > max) return null;
     if (!req.body) return new Uint8Array(0);
     const reader = req.body.getReader();
-    const parts = [];
+    let parts = [];
     let n = 0;
     for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         n += value.byteLength;
-        if (n > max) {
-            await reader.cancel().catch(() => {});
-            return null;
-        }
-        parts.push(value);
+        // too long: what has been kept is dropped and the rest is read and thrown away, so that the
+        // sender gets its answer once it has finished sending rather than a broken connection
+        if (n > max) parts = null;
+        else parts?.push(value);
     }
+    if (!parts) return null;
     const out = new Uint8Array(n);
     let at = 0;
     for (const part of parts) { out.set(part, at); at += part.byteLength; }

@@ -974,7 +974,8 @@ window.addEventListener('beforeunload', (e) => {
 // A link is not allowed to sign the browser in by itself: anyone can send a link carrying a key of
 // their own, and whoever followed it would then be saving files where the sender can read them.
 // So the page says whose key it is and waits to be told, and until then nothing changes.
-let offered = null;     // the key from a link, waiting for an answer
+let offered = null;     // the newest key from a link
+let confirming = null;  // the key the question on screen describes; "Sign in" can only ever accept this one
 
 function takeKeyFromAddress() {
     const handed = location.hash.match(/^#key=(.+)$/);
@@ -986,8 +987,19 @@ function takeKeyFromAddress() {
 async function offerKey(candidate) {
     if (candidate === key) return; // already signed in with it
     offered = candidate;
+    // a question already on screen is about another key: it is withdrawn before this one is looked up,
+    // so that "Sign in" can never be pressed for a key other than the one described
+    confirming = null;
+    if ($('handover').open) {
+        $('handover-title').textContent = 'Checking the key in this link…';
+        $('handover-who').textContent = '';
+        $('handover-now').hidden = true;
+        $('handover-ok').hidden = true;
+        $('handover-cancel').textContent = 'Cancel';
+    }
     const say = (title, who, canSignIn) => {
         if (offered !== candidate) return; // a newer link took its place
+        confirming = canSignIn ? candidate : null;
         $('handover-title').textContent = title;
         $('handover-who').textContent = who;
         $('handover-now').textContent = me && canSignIn ? `This browser is signed in with ${describe(me)}. That key will be forgotten here.` : '';
@@ -1010,15 +1022,23 @@ async function offerKey(candidate) {
     say('Sign in with the key from this link?', `It is ${describe(who)}.`, true);
 }
 
+// Answering the question, either way, also drops a link that is still being looked up. That is done
+// here and now rather than when the browser reports the dialog closed, which happens a moment later:
+// an answer about the link arriving in between would otherwise put the question back on screen.
+function answer() {
+    const candidate = confirming;
+    offered = confirming = null;
+    if ($('handover').open) $('handover').close();
+    return candidate;
+}
 $('handover-ok').addEventListener('click', () => {
-    const candidate = offered;
-    $('handover').close();
+    const candidate = answer();
     if (!candidate) return;
     if (me) signOut();
     signIn(candidate);
 });
-$('handover-cancel').addEventListener('click', () => $('handover').close());
-$('handover').addEventListener('close', () => { offered = null; });
+$('handover-cancel').addEventListener('click', answer);
+$('handover').addEventListener('cancel', () => { offered = confirming = null; }); // the Escape key
 
 // The key this browser already holds stays in use whatever the address says.
 const handed = takeKeyFromAddress();

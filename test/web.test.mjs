@@ -286,6 +286,31 @@ inBrowser('a link cannot swap the key a browser is signed in with, or sign it in
     assert.equal(await kept(), theirs);
     assert.match(await page.textContent('#who'), /key "someone else"/);
 
+    // a second link arriving while the first is still being asked about: the question on screen is withdrawn
+    // at once, so "Sign in" cannot be pressed for one key while the page describes another
+    const third = await grant('a third key', { prefix: 'third/' });
+    let release;
+    const held = new Promise((res) => { release = res; });
+    await page.route('**/whoami', async (route) => {
+        if (route.request().headers().authorization === `Bearer ${third}`) await held;
+        await route.continue();
+    });
+    await page.goto(`${worker.url}/#key=${mine}`);
+    await page.locator('#handover-who', { hasText: 'It is key "my own key"' }).waitFor();
+    await page.evaluate((k) => { location.hash = `#key=${k}`; }, third);
+    await page.locator('#handover-title', { hasText: 'Checking the key' }).waitFor();
+    assert.ok(await page.locator('#handover-ok').isHidden());
+    assert.equal(await page.textContent('#handover-who'), '');
+    await page.evaluate(() => document.getElementById('handover-ok').click()); // pressed all the same, by a script
+    assert.equal(await kept(), theirs);
+    assert.match(await page.textContent('#who'), /key "someone else"/);
+    // the script's press closed the question; the answer about the third key, arriving late, must not bring one back
+    release();
+    await page.waitForTimeout(500);
+    assert.ok(await page.locator('#handover').isHidden());
+    assert.equal(await kept(), theirs);
+    await page.unroute('**/whoami');
+
     // a link whose key does not work says so and changes nothing
     await page.goto(`${worker.url}/#key=es_00000000_${'0'.repeat(64)}`);
     await page.locator('#handover-title', { hasText: 'does not work' }).waitFor();

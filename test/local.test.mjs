@@ -227,8 +227,10 @@ test('one-request upload and download of a small file over plain HTTP', async ()
         pull(c) { if (total <= 0) return c.close(); const n = Math.min(total, 1024 * 1024); total -= n; c.enqueue(new Uint8Array(n)); },
     });
     const before = tgm.messages(A).size + tgm.messages(B).size;
-    assert.equal((await call(k, 'PUT', '/raw/http/huge-unannounced.bin', { body: stream(20 * 1024 * 1024), duplex: 'half' })).status, 413);
-    assert.equal((await call(k, 'POST', '/files', { body: stream(5 * 1024 * 1024), duplex: 'half', headers: { 'content-type': 'application/json' } })).status, 413);
+    const hugeUnannounced = await call(k, 'PUT', '/raw/http/huge-unannounced.bin', { body: stream(20 * 1024 * 1024), duplex: 'half' });
+    assert.equal(hugeUnannounced.status, 413, await hugeUnannounced.text());
+    const hugeJson = await call(k, 'POST', '/files', { body: stream(5 * 1024 * 1024), duplex: 'half', headers: { 'content-type': 'application/json' } });
+    assert.equal(hugeJson.status, 413, await hugeJson.text());
     assert.equal(tgm.messages(A).size + tgm.messages(B).size, before);
     assert.ok(!(await store.ls('http/', { all: true })).some(f => f.path.includes('huge')));
     const unannounced = await call(k, 'PUT', '/raw/http/unannounced.bin', { body: stream(3 * 1024 * 1024), duplex: 'half' });
