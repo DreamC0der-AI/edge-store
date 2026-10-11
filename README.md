@@ -203,3 +203,7 @@ Anyone who is a member of the two channels can read the stored files directly in
 - **Old messages.** Telegram is reported to refuse bots deleting messages older than 48 hours. If that happens `edge rm` still removes the file from the index, and the old chunk messages stay in the channel until you delete them yourself.
 - **Index backup size.** The snapshot must fit in one message of under 19 MB compressed.
 - **Channel size.** Uploads move on to another registered channel once one holds 500,000 messages; add channels with `edge channel add`.
+
+## License
+
+[MIT](LICENSE)
