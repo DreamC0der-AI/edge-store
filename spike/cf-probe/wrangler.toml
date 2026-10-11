@@ -1,0 +1,14 @@
+name = "edge-store-probe"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+TOKEN = "REPLACE_ME"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edge-store-probe"
+database_id = "REPLACE_ME"
+
+[triggers]
+crons = []

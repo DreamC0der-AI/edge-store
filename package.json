@@ -1,0 +1,21 @@
+{
+  "name": "edge-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "edge": "client/edge.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/unit.test.mjs test/local.test.mjs test/web.test.mjs",
+    "e2e": "node test/e2e.mjs",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.0",
+    "wrangler": "^4.149.0"
+  }
+}

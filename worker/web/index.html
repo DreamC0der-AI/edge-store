@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src blob:; frame-src blob:; base-uri 'none'; form-action 'none'">
+<title>edge-store</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%232f6f5e'/%3E%3Cpath d='M4 5h8M4 8h8M4 11h5' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<main id="signin" hidden>
+    <form id="signin-form" class="card">
+        <h1>edge-store</h1>
+        <p>Paste an access key to open your files.</p>
+        <label for="key-input">Access key</label>
+        <input id="key-input" type="password" autocomplete="off" spellcheck="false" required placeholder="es_…">
+        <p id="signin-error" class="error" role="alert" hidden></p>
+        <button type="submit" class="primary">Open</button>
+        <p class="hint">Get a key with <code>edge key add "web"</code>, or run <code>edge web</code> to open this page already signed in. The key is kept in this browser until you sign out.</p>
+    </form>
+</main>
+
+<div id="app" hidden>
+    <header>
+        <strong class="brand">edge-store</strong>
+        <span id="who" class="who"></span>
+        <button id="signout" type="button" class="quiet">Sign out</button>
+    </header>
+
+    <p id="health" class="health" hidden></p>
+
+    <section id="drop" class="drop">
+        <p class="drop-title">Drop files or folders here</p>
+        <p class="drop-sub">They are saved into <span id="drop-target"></span>, two copies each.</p>
+        <button id="choose" type="button" class="primary">Choose files</button>
+        <input id="file-input" type="file" multiple hidden>
+    </section>
+
+    <section id="transfers" class="transfers" hidden>
+        <div class="section-head">
+            <h2>Transfers</h2>
+            <button id="clear-transfers" type="button" class="quiet">Clear finished</button>
+        </div>
+        <ul id="transfer-list"></ul>
+    </section>
+
+    <section class="files">
+        <div class="section-head">
+            <nav id="crumbs" class="crumbs" aria-label="Folder"></nav>
+            <input id="filter" type="search" placeholder="Filter by name" aria-label="Filter by name">
+            <button id="refresh" type="button" class="quiet">Refresh</button>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+        <p id="empty" class="empty" hidden></p>
+        <p id="summary" class="summary"></p>
+    </section>
+
+    <footer>Files are stored exactly as given. Encrypt anything private before you upload it.</footer>
+</div>
+
+<dialog id="viewer" class="viewer" aria-labelledby="viewer-name">
+    <header>
+        <div class="viewer-title">
+            <div id="viewer-name" class="viewer-name"></div>
+            <div id="viewer-meta" class="f-meta"></div>
+        </div>
+        <button id="viewer-prev" type="button" aria-label="Previous file">‹</button>
+        <button id="viewer-next" type="button" aria-label="Next file">›</button>
+        <button id="viewer-download" type="button">Download</button>
+        <button id="viewer-close" type="button">Close</button>
+    </header>
+    <div id="viewer-body" class="viewer-body"></div>
+</dialog>
+
+<div id="drop-veil" class="drop-veil" hidden><p>Drop to save</p></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

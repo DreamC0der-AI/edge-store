@@ -1,0 +1,20 @@
+# The Worker's settings, minus the one value that differs per deployment: the id of the D1 database.
+# scripts/setup.mjs and "npm run deploy" copy this file to wrangler.toml with the id filled in.
+name = "edge-store"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Secrets (set with scripts/setup.mjs): ACCESS_TOKEN, TG_BOT_TOKEN
+
+# The web page. Requests for these files are answered without running the Worker;
+# everything else (the API) goes to src/index.js.
+[assets]
+directory = "./web"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edge-store"
+database_id = "REPLACE_ME"
+
+[triggers]
+crons = ["* * * * *"]

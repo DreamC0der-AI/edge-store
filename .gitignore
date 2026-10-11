@@ -1,0 +1,30 @@
+# Secrets: the Telegram bot token and channel ids (see spike/env.example), and wrangler's local secrets
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+
+# Made by scripts/setup.mjs from worker/wrangler.template.toml; holds this deployment's database id
+worker/wrangler.toml
+
+# Dependencies and wrangler's local state
+node_modules/
+.wrangler/
+
+# Downloads in progress (edge get)
+*.part
+
+# Local tooling
+.telegram-sessions/
+.ddag/
+.claude/settings.local.json
+
+# Operating system and editor clutter
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log

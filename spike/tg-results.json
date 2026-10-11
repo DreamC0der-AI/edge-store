@@ -1,0 +1,86 @@
+{
+  "startedAt": "2026-10-10T19:32:21.588Z",
+  "tests": {
+    "bytes": {
+      "identical": true,
+      "range": {
+        "ok": true,
+        "status": 206,
+        "bytes": 1024,
+        "sha": "e7c47384430dee852fd8370bd27a2c1c4ba2fc355052e5395d7dd785c8df8891",
+        "contentLength": "1024",
+        "contentRange": "bytes 0-1023/16777232",
+        "acceptRanges": null
+      },
+      "rangeMatches": true,
+      "midRange": {
+        "ok": true,
+        "status": 206,
+        "bytes": 4096,
+        "sha": "5dee2712ba769a430d7fcd39556a91bcde4209bfdeb17167ad90e72571eb26ec",
+        "contentLength": "4096",
+        "contentRange": "bytes 8388608-8392703/16777232",
+        "acceptRanges": null
+      },
+      "midRangeMatches": true,
+      "head": {
+        "ok": true,
+        "status": 200,
+        "bytes": 0,
+        "sha": null,
+        "contentLength": "16777232",
+        "contentRange": null,
+        "acceptRanges": "bytes"
+      },
+      "bigUpload": true,
+      "bigDownload": "Bad Request: file is too big",
+      "upload49": "ok in 10.5s",
+      "upload51": "Request Entity Too Large"
+    },
+    "replica": {
+      "copyOk": true,
+      "copySharesFile": true,
+      "secondUploadSharesFile": false,
+      "deletedOriginal": true,
+      "copySurvives": true,
+      "secondSurvives": true
+    },
+    "liveness": {
+      "fileIdOutlivesMessage": true,
+      "forwardDeleted": "Bad Request: message to forward not found",
+      "forwardLive": "succeeded",
+      "forwardGivesSameFile": true,
+      "editDeleted": "Bad Request: message to edit not found",
+      "editLive": "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message"
+    },
+    "rate": {
+      "chunks": [
+        5.8,
+        6.4,
+        7.4,
+        6.3,
+        6,
+        6.1,
+        8.5,
+        6.4,
+        5.7,
+        6.2,
+        6.4,
+        6.4,
+        6.3,
+        6.2,
+        5.8,
+        5.9,
+        6,
+        6.3,
+        6.7,
+        5.8
+      ],
+      "totalSecs": 127,
+      "failed": 0,
+      "throttled": [],
+      "gbPerHour": 8.87
+    }
+  },
+  "finishedAt": "2026-10-10T19:35:52.201Z"
+}
