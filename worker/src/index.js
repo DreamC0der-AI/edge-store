@@ -54,9 +54,24 @@ const normPath = (p) => {
     return s;
 };
 
+// The address of wrangler dev, which has no https. Everywhere else plain http is refused.
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 export default {
     async fetch(req, env, ctx) {
+        // A key sent over plain http can be read on its way, so the page must never load there:
+        // its script would send one. 308 keeps the method and body of an API call.
+        const url = new URL(req.url);
+        if (url.protocol === 'http:' && !LOCAL_HOSTS.has(url.hostname)) {
+            url.protocol = 'https:';
+            return Response.redirect(url.href, 308);
+        }
         try {
+            // the web page's files come first, as they did when they were served without the Worker
+            if (req.method === 'GET' || req.method === 'HEAD') {
+                const file = await env.ASSETS.fetch(req);
+                if (file.status !== 404) return file;
+            }
             const who = await authenticate(req, env);
             if (!who) return json({ error: 'unauthorized' }, 401);
             return await route(req, env, ctx, who);

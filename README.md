@@ -87,7 +87,7 @@ edge key revoke <key-id>                           the key stops working at once
 
 ## Web page
 
-The Worker serves a page at its own address (`https://<your-worker>.workers.dev/`) for saving and checking files from a browser:
+The Worker serves a page at its own address (`https://<your-worker>.workers.dev/`) for saving and checking files from a browser. Plain `http` requests are sent to `https`, so a key is never sent unencrypted by the page:
 
 ```
 edge web                    grant a key for the page and open it, ready to sign in
@@ -104,7 +104,7 @@ edge web --prefix phone/    a page confined to one folder
 - **Kept in the browser:** the key, and the previews it has fetched. Signing out removes both.
 - **Large downloads:** Chrome and Edge on a computer write a download over 256 MB straight to a file you pick. Other browsers (Safari, Firefox, phones) hold the whole download in memory until it is complete, so use the command line there for files of several gigabytes.
 
-The page lives in `worker/web/` and is an ordinary client of the HTTP API below. It is served as static files, which do not count against the Worker's daily request allowance.
+The page lives in `worker/web/` and is an ordinary client of the HTTP API below. Its files are served through the Worker, so that plain `http` can be refused, and each one counts against the Worker's daily request allowance.
 
 ## Commands
 

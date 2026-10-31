@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, createHash } from 'node:crypto';
 import { Store, withRetry, pool, sha256, thumbPath, printable, safe } from '../client/lib.mjs';
 import * as web from '../worker/web/util.js';
+import worker from '../worker/src/index.js';
 
 const err = (props) => Object.assign(new Error('x'), props);
 
@@ -230,4 +231,29 @@ test('text from the store is printed with control characters spelled out, and or
     const name = 'x\ny';
     assert.equal(safe`one ${name}\ntwo ${3}`, 'one x\\u{a}y\ntwo 3');
     assert.equal(safe`no values`, 'no values');
+});
+
+test('plain http is sent to https before anything else runs, with the path, the query and the method kept', async () => {
+    const env = { ASSETS: { fetch() { throw new Error('reached the page files'); } } };
+    for (const method of ['GET', 'PUT']) {
+        const r = await worker.fetch(new Request('http://store.example/raw/a%20b.pdf?x=1', { method }), env, {});
+        assert.equal(r.status, 308);
+        assert.equal(r.headers.get('location'), 'https://store.example/raw/a%20b.pdf?x=1');
+    }
+});
+
+test('https and the local dev address are served, and a path that is no page file reaches the API', async () => {
+    const asked = [];
+    const env = { ASSETS: { fetch: async (req) => {
+        asked.push(new URL(req.url).pathname);
+        return new Response('page', { status: req.url.endsWith('/') ? 200 : 404 });
+    } } };
+    for (const origin of ['https://store.example', 'http://127.0.0.1:8787', 'http://localhost:8787']) {
+        const page = await worker.fetch(new Request(`${origin}/`), env, {});
+        assert.equal(page.status, 200, origin);
+        assert.equal(await page.text(), 'page');
+        assert.equal((await worker.fetch(new Request(`${origin}/whoami`), env, {})).status, 401, origin);
+    }
+    assert.equal((await worker.fetch(new Request('https://store.example/x', { method: 'POST' }), env, {})).status, 401);
+    assert.ok(!asked.includes('/x'), 'a POST does not look for a page file');
 });

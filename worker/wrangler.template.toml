@@ -6,10 +6,12 @@ compatibility_date = "2026-09-01"
 
 # Secrets (set with scripts/setup.mjs): ACCESS_TOKEN, TG_BOT_TOKEN
 
-# The web page. Requests for these files are answered without running the Worker;
-# everything else (the API) goes to src/index.js.
+# The web page. The Worker runs first even for these files, because only it can send a plain
+# http request to https; it then hands them over through the ASSETS binding.
 [assets]
 directory = "./web"
+binding = "ASSETS"
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"
